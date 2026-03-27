@@ -24,9 +24,9 @@
 # ─────────────────────────────────────────────────────────────────
 
 ARG UV_VERSION=latest
+ARG UBUNTU_VERSION=24.04
 FROM ghcr.io/astral-sh/uv:${UV_VERSION} AS uv
 
-ARG UBUNTU_VERSION=24.04
 FROM ubuntu:${UBUNTU_VERSION}
 
 ARG UBUNTU_VERSION
