@@ -23,6 +23,9 @@
 #   CMD ["uv", "run", "python", "-m", "myapp"]
 # ─────────────────────────────────────────────────────────────────
 
+ARG UV_VERSION=latest
+FROM ghcr.io/astral-sh/uv:${UV_VERSION} AS uv
+
 ARG UBUNTU_VERSION=24.04
 FROM ubuntu:${UBUNTU_VERSION}
 
@@ -88,7 +91,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # ── uv (copied from official image) ──────────────────────────────
-COPY --from=ghcr.io/astral-sh/uv:${UV_VERSION} /uv /uvx /usr/local/bin/
+COPY --from=uv /uv /uvx /usr/local/bin/
 
 # ── PyPI / uv / Playwright mirror (Aliyun) + Python install ──────
 RUN set -eux; \
