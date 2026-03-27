@@ -57,7 +57,7 @@ jobs:
             PYTHON_VERSION=${{ matrix.python }}
             CHINA_MIRROR=${{ matrix.mirror }}
           platforms: linux/amd64,linux/arm64
-          push: ${{ github.event_name != "pull_request" }}
+          push: ${{ github.event_name != 'pull_request' }}
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ matrix.variant }}-py${{ matrix.python }}-ubuntu${{ matrix.ubuntu }}${{ steps.tag.outputs.suffix }}
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ matrix.variant }}-py${{ matrix.python }}${{ steps.tag.outputs.suffix }}
