@@ -23,7 +23,10 @@
 #   CMD ["uv", "run", "python", "-m", "myapp"]
 # ─────────────────────────────────────────────────────────────────
 
+ARG UV_VERSION=latest
 ARG UBUNTU_VERSION=24.04
+FROM ghcr.io/astral-sh/uv:${UV_VERSION} AS uv
+
 FROM ubuntu:${UBUNTU_VERSION}
 
 ARG UBUNTU_VERSION
@@ -56,11 +59,12 @@ RUN set -eux; \
     fi
 
 # ── System dependencies (including Playwright) ───────────────────
+# Note: libasound2 was renamed to libasound2t64 in Ubuntu 24.04 (t64 transition);
+#       the install tries libasound2t64 first, then falls back to libasound2 for 22.04.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
     build-essential \
-    # Playwright - browser runtime libraries
     libnss3 \
     libnspr4 \
     libatk1.0-0 \
@@ -75,19 +79,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgbm1 \
     libpango-1.0-0 \
     libcairo2 \
-    libasound2 \
     libatspi2.0-0 \
     libxshmfence1 \
     libvulkan1 \
     libx11-xcb1 \
     libxcb-dri3-0 \
-    # Fonts (CJK + emoji) — remove if not needed to save ~150MB
     fonts-noto-cjk \
     fonts-noto-color-emoji \
+    && (apt-get install -y --no-install-recommends libasound2t64 \
+        || apt-get install -y --no-install-recommends libasound2) \
     && rm -rf /var/lib/apt/lists/*
 
 # ── uv (copied from official image) ──────────────────────────────
-COPY --from=ghcr.io/astral-sh/uv:${UV_VERSION} /uv /uvx /usr/local/bin/
+COPY --from=uv /uv /uvx /usr/local/bin/
 
 # ── PyPI / uv / Playwright mirror (Aliyun) + Python install ──────
 RUN set -eux; \
