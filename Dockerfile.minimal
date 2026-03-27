@@ -81,7 +81,7 @@ RUN set -eux; \
 # ── Non-root user ────────────────────────────────────────────────
 RUN groupadd -r app && \
     useradd -r -g app -d /home/app -s /bin/bash -m app && \
-    mkdir -p /code && \
+    mkdir -p /code /opt/uv && \
     chown -R app:app /code /opt/uv
 
 WORKDIR /code
