@@ -1,0 +1,93 @@
+# ── devpack/minimal ───────────────────────────────────────────────
+# Ubuntu + Python (via uv) + uv package manager
+#
+# Build args:
+#   UBUNTU_VERSION  22.04 | 24.04      (default 24.04)
+#   PYTHON_VERSION  3.12  | 3.13       (default 3.13)
+#   UV_VERSION      any uv tag         (default latest)
+#   CHINA_MIRROR    true  | false      (default false)
+#
+# Usage:
+#   docker build --build-arg PYTHON_VERSION=3.12 -f Dockerfile.minimal -t devpack:minimal .
+#
+# Downstream Dockerfile tips:
+#   - USER root                # if you need to install more system packages
+#   - RUN apt-get install … && USER app   # switch back when done
+#   - For RUN-time mirror env, the entrypoint sources /etc/profile.d/*.sh
+#     automatically.  If you run uv/pip in a RUN layer (before entrypoint),
+#     source it manually:  RUN . /etc/profile.d/china-mirror.sh && uv sync
+# ─────────────────────────────────────────────────────────────────
+
+ARG UBUNTU_VERSION=24.04
+FROM ubuntu:${UBUNTU_VERSION}
+
+ARG UBUNTU_VERSION
+ARG PYTHON_VERSION=3.13
+ARG UV_VERSION=latest
+ARG CHINA_MIRROR=false
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    UV_TOOLCHAIN_DIR=/opt/uv \
+    UV_COMPILE_BYTECODE=0 \
+    PYTHONIOENCODING=utf-8 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    TERM=xterm-256color \
+    COLUMNS=120 \
+    LINES=50
+
+# ── APT mirror (Aliyun) ──────────────────────────────────────────
+RUN set -eux; \
+    if [ "$CHINA_MIRROR" = "true" ]; then \
+      if [ -f /etc/apt/sources.list ]; then \
+        sed -i 's|http://archive.ubuntu.com/ubuntu|http://mirrors.aliyun.com/ubuntu|g' /etc/apt/sources.list && \
+        sed -i 's|http://security.ubuntu.com/ubuntu|http://mirrors.aliyun.com/ubuntu|g' /etc/apt/sources.list; \
+      fi; \
+      if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then \
+        sed -i 's|http://archive.ubuntu.com/ubuntu|http://mirrors.aliyun.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources && \
+        sed -i 's|http://security.ubuntu.com/ubuntu|http://mirrors.aliyun.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources; \
+      fi; \
+    fi
+
+# ── System dependencies ──────────────────────────────────────────
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── uv (copied from official image) ──────────────────────────────
+COPY --from=ghcr.io/astral-sh/uv:${UV_VERSION} /uv /uvx /usr/local/bin/
+
+# ── PyPI / uv mirror (Aliyun) + Python install ───────────────────
+RUN set -eux; \
+    if [ "$CHINA_MIRROR" = "true" ]; then \
+      mkdir -p /etc/profile.d && \
+      { \
+        echo 'UV_INDEX_URL="https://mirrors.aliyun.com/pypi/simple/"'; \
+        echo 'UV_EXTRA_INDEX_URL="https://pypi.org/simple/"'; \
+        echo 'PIP_INDEX_URL="https://mirrors.aliyun.com/pypi/simple/"'; \
+        echo 'PIP_TRUSTED_HOST="mirrors.aliyun.com"'; \
+      } > /etc/profile.d/china-mirror.sh && \
+      chmod +x /etc/profile.d/china-mirror.sh && \
+      export UV_INDEX_URL="https://mirrors.aliyun.com/pypi/simple/" && \
+      export UV_EXTRA_INDEX_URL="https://pypi.org/simple/"; \
+    fi; \
+    uv python install ${PYTHON_VERSION}
+
+# ── Non-root user ────────────────────────────────────────────────
+RUN groupadd -r app && \
+    useradd -r -g app -d /home/app -s /bin/bash -m app && \
+    mkdir -p /code && \
+    chown -R app:app /code /opt/uv
+
+WORKDIR /code
+
+# ── Entrypoint (sources /etc/profile.d for runtime mirror env) ───
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+USER app
+
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+CMD ["/bin/bash"]

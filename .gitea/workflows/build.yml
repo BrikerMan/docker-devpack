@@ -1,0 +1,62 @@
+name: Build & Push Docker Images
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ${{ secrets.REGISTRY || "gitea.example.com" }}
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        ubuntu: ["22.04", "24.04"]
+        python: ["3.12", "3.13"]
+        variant: [minimal, playwright]
+        mirror: [false, true]
+      fail-fast: false
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-qemu-action@v3
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Login to Container Registry
+        if: github.event_name != "pull_request"
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
+
+      - name: Compute tag suffix
+        id: tag
+        run: |
+          SUFFIX=""
+          [ "${{ matrix.mirror }}" = "true" ] && SUFFIX="-china"
+          echo "suffix=${SUFFIX}" >> "$GITHUB_OUTPUT"
+
+      - name: Build & Push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.${{ matrix.variant }}
+          build-args: |
+            UBUNTU_VERSION=${{ matrix.ubuntu }}
+            PYTHON_VERSION=${{ matrix.python }}
+            CHINA_MIRROR=${{ matrix.mirror }}
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != "pull_request" }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ matrix.variant }}-py${{ matrix.python }}-ubuntu${{ matrix.ubuntu }}${{ steps.tag.outputs.suffix }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ matrix.variant }}-py${{ matrix.python }}${{ steps.tag.outputs.suffix }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
