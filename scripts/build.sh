@@ -6,7 +6,6 @@ usage() {
 Usage: ./scripts/build.sh [OPTIONS]
 
 Options:
-  -v, --variant VARIANT      Image variant: minimal | playwright  (default: minimal)
   -u, --ubuntu VERSION       Ubuntu version: 22.04 | 24.04        (default: 24.04)
   -p, --python VERSION       Python version: 3.12 | 3.13          (default: 3.13)
   -c, --china                Enable Aliyun mirrors (apt + PyPI + uv)
@@ -17,14 +16,13 @@ Options:
   -h, --help                 Show this help
 
 Examples:
-  ./scripts/build.sh                                      # minimal, 24.04, py3.13
-  ./scripts/build.sh -v playwright -c                     # playwright + china mirrors
+  ./scripts/build.sh                                      # 24.04, py3.13
+  ./scripts/build.sh -c                                   # with china mirrors
   ./scripts/build.sh -u 22.04 -p 3.12 --platform linux/amd64,linux/arm64
-  ./scripts/build.sh -v playwright -c --push -t ghcr.io/user/devpack:pw-china
+  ./scripts/build.sh -c --push -t ghcr.io/user/devpack:china
 EOF
 }
 
-VARIANT="minimal"
 UBUNTU_VERSION="24.04"
 PYTHON_VERSION="3.13"
 CHINA_MIRROR="false"
@@ -34,7 +32,6 @@ PLATFORMS=""
 
 while [[ $# -gt 0 ]]; do
     case $1 in
-        -v|--variant)  VARIANT="$2";       shift 2 ;;
         -u|--ubuntu)   UBUNTU_VERSION="$2"; shift 2 ;;
         -p|--python)   PYTHON_VERSION="$2"; shift 2 ;;
         -c|--china)    CHINA_MIRROR="true"; shift ;;
@@ -49,7 +46,7 @@ done
 if [ -z "$TAG" ]; then
     SUFFIX=""
     [ "$CHINA_MIRROR" = "true" ] && SUFFIX="-china"
-    TAG="devpack:${VARIANT}-py${PYTHON_VERSION}-ubuntu${UBUNTU_VERSION}${SUFFIX}"
+    TAG="devpack:py${PYTHON_VERSION}-ubuntu${UBUNTU_VERSION}${SUFFIX}"
 fi
 
 BUILD_ARGS=(
@@ -72,7 +69,7 @@ fi
 if [ "$PUSH" = "true" ]; then
     echo "Building & pushing: ${TAG}"
     $DOCKER_CMD build \
-        -f "Dockerfile.${VARIANT}" \
+        -f Dockerfile.minimal \
         -t "$TAG" \
         --push \
         "${BUILD_ARGS[@]}" \
@@ -80,7 +77,7 @@ if [ "$PUSH" = "true" ]; then
 else
     echo "Building (local): ${TAG}"
     $DOCKER_CMD build \
-        -f "Dockerfile.${VARIANT}" \
+        -f Dockerfile.minimal \
         -t "$TAG" \
         --load \
         "${BUILD_ARGS[@]}" \

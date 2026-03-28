@@ -39,7 +39,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     COLUMNS=120 \
     LINES=50
 
-# ── APT mirror (Aliyun) ──────────────────────────────────────────
+# ── APT mirror (Aliyun) + System dependencies ──────────────────────
 RUN set -eux; \
     if [ "$CHINA_MIRROR" = "true" ]; then \
       if [ -f /etc/apt/sources.list ]; then \
@@ -50,10 +50,8 @@ RUN set -eux; \
         sed -i 's|http://archive.ubuntu.com/ubuntu|http://mirrors.aliyun.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources && \
         sed -i 's|http://security.ubuntu.com/ubuntu|http://mirrors.aliyun.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources; \
       fi; \
-    fi
-
-# ── System dependencies ──────────────────────────────────────────
-RUN apt-get update && apt-get install -y --no-install-recommends \
+    fi; \
+    apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
     build-essential \
@@ -72,7 +70,6 @@ RUN set -eux; \
         echo 'PIP_INDEX_URL="https://mirrors.aliyun.com/pypi/simple/"'; \
         echo 'PIP_TRUSTED_HOST="mirrors.aliyun.com"'; \
       } > /etc/profile.d/china-mirror.sh && \
-      chmod +x /etc/profile.d/china-mirror.sh && \
       export UV_INDEX_URL="https://mirrors.aliyun.com/pypi/simple/" && \
       export UV_EXTRA_INDEX_URL="https://pypi.org/simple/"; \
     fi; \

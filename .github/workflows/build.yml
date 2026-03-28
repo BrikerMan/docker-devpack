@@ -18,7 +18,6 @@ jobs:
       matrix:
         ubuntu: ["22.04", "24.04"]
         python: ["3.12", "3.13"]
-        variant: [minimal, playwright]
         mirror: [false, true]
       fail-fast: false
     runs-on: ubuntu-latest
@@ -50,11 +49,16 @@ jobs:
           [ "${{ matrix.mirror }}" = "true" ] && SUFFIX="-china"
           echo "suffix=${SUFFIX}" >> "$GITHUB_OUTPUT"
 
+      - name: Determine if latest
+        id: latest
+        if: matrix.ubuntu == '24.04' && matrix.python == '3.13' && matrix.mirror == false
+        run: echo "is_latest=true" >> "$GITHUB_OUTPUT"
+
       - name: Build & Push
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: Dockerfile.${{ matrix.variant }}
+          file: Dockerfile.minimal
           build-args: |
             UBUNTU_VERSION=${{ matrix.ubuntu }}
             PYTHON_VERSION=${{ matrix.python }}
@@ -62,7 +66,8 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
           tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ matrix.variant }}-py${{ matrix.python }}-ubuntu${{ matrix.ubuntu }}${{ steps.tag.outputs.suffix }}
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ matrix.variant }}-py${{ matrix.python }}${{ steps.tag.outputs.suffix }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:py${{ matrix.python }}-ubuntu${{ matrix.ubuntu }}${{ steps.tag.outputs.suffix }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:py${{ matrix.python }}${{ steps.tag.outputs.suffix }}
+            ${{ steps.latest.outputs.is_latest == 'true' && format('{0}/{1}:latest', env.REGISTRY, env.IMAGE_NAME) || '' }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
