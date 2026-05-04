@@ -8,17 +8,19 @@ Universal Python Docker base images built on Ubuntu + uv + Python.
 docker pull ghcr.io/brikerman/docker-devpack:<TAG>
 ```
 
-### `latest` Tag
+### `latest` / `latest-china` Tags
 
-The `latest` tag always points to **`py3.14-ubuntu26.04`** (no mirror).
+- `latest` → **`py3.14-ubuntu26.04`**
+- `latest-china` → **`py3.14-ubuntu26.04-china`** (Aliyun mirrors)
 
 ```bash
 docker pull ghcr.io/brikerman/docker-devpack:latest
+docker pull ghcr.io/brikerman/docker-devpack:latest-china
 ```
 
 ### All Tags
 
-> `latest` → `py3.14-ubuntu26.04`
+> `latest` → `py3.14-ubuntu26.04` · `latest-china` → `py3.14-ubuntu26.04-china`
 
 **Standard**
 

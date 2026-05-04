@@ -54,6 +54,11 @@ jobs:
         if: matrix.ubuntu == '26.04' && matrix.python == '3.14' && matrix.mirror == false
         run: echo "is_latest=true" >> "$GITHUB_OUTPUT"
 
+      - name: Determine if latest-china
+        id: latest_china
+        if: matrix.ubuntu == '26.04' && matrix.python == '3.14' && matrix.mirror == true
+        run: echo "is_latest_china=true" >> "$GITHUB_OUTPUT"
+
       - name: Build & Push
         uses: docker/build-push-action@v6
         with:
@@ -69,5 +74,6 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:py${{ matrix.python }}-ubuntu${{ matrix.ubuntu }}${{ steps.tag.outputs.suffix }}
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:py${{ matrix.python }}${{ steps.tag.outputs.suffix }}
             ${{ steps.latest.outputs.is_latest == 'true' && format('{0}/{1}:latest', env.REGISTRY, env.IMAGE_NAME) || '' }}
+            ${{ steps.latest_china.outputs.is_latest_china == 'true' && format('{0}/{1}:latest-china', env.REGISTRY, env.IMAGE_NAME) || '' }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
