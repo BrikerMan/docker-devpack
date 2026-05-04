@@ -10,7 +10,7 @@ docker pull ghcr.io/brikerman/docker-devpack:<TAG>
 
 ### `latest` Tag
 
-The `latest` tag always points to **`py3.13-ubuntu24.04`** (no mirror).
+The `latest` tag always points to **`py3.14-ubuntu26.04`** (no mirror).
 
 ```bash
 docker pull ghcr.io/brikerman/docker-devpack:latest
@@ -20,13 +20,23 @@ docker pull ghcr.io/brikerman/docker-devpack:latest
 
 | Tag | Ubuntu | Python | Mirror |
 |-----|--------|--------|--------|
-| `latest` | 24.04 | 3.13 | — |
+| `latest` | 26.04 | 3.14 | — |
+| `py3.14-ubuntu26.04` | 26.04 | 3.14 | — |
+| `py3.14-ubuntu24.04` | 24.04 | 3.14 | — |
+| `py3.14-ubuntu22.04` | 22.04 | 3.14 | — |
+| `py3.13-ubuntu26.04` | 26.04 | 3.13 | — |
 | `py3.13-ubuntu24.04` | 24.04 | 3.13 | — |
 | `py3.13-ubuntu22.04` | 22.04 | 3.13 | — |
+| `py3.12-ubuntu26.04` | 26.04 | 3.12 | — |
 | `py3.12-ubuntu24.04` | 24.04 | 3.12 | — |
 | `py3.12-ubuntu22.04` | 22.04 | 3.12 | — |
+| `py3.14-ubuntu26.04-china` | 26.04 | 3.14 | Aliyun |
+| `py3.14-ubuntu24.04-china` | 24.04 | 3.14 | Aliyun |
+| `py3.14-ubuntu22.04-china` | 22.04 | 3.14 | Aliyun |
+| `py3.13-ubuntu26.04-china` | 26.04 | 3.13 | Aliyun |
 | `py3.13-ubuntu24.04-china` | 24.04 | 3.13 | Aliyun |
 | `py3.13-ubuntu22.04-china` | 22.04 | 3.13 | Aliyun |
+| `py3.12-ubuntu26.04-china` | 26.04 | 3.12 | Aliyun |
 | `py3.12-ubuntu24.04-china` | 24.04 | 3.12 | Aliyun |
 | `py3.12-ubuntu22.04-china` | 22.04 | 3.12 | Aliyun |
 
@@ -38,15 +48,15 @@ Approx. size: ~200MB
 
 | ARG | Options | Default | Description |
 |-----|---------|---------|-------------|
-| `UBUNTU_VERSION` | `22.04`, `24.04` | `24.04` | Ubuntu version |
-| `PYTHON_VERSION` | `3.12`, `3.13` | `3.13` | Python version |
+| `UBUNTU_VERSION` | `22.04`, `24.04`, `26.04` | `26.04` | Ubuntu version |
+| `PYTHON_VERSION` | `3.12`, `3.13`, `3.14` | `3.14` | Python version |
 | `UV_VERSION` | any uv tag | `latest` | uv version |
 | `CHINA_MIRROR` | `true`, `false` | `false` | Enable Aliyun mirrors (apt + PyPI + uv) |
 
 ## Local Build
 
 ```bash
-# Default (24.04 + py3.13)
+# Default (26.04 + py3.14)
 ./scripts/build.sh
 
 # Specify versions
@@ -67,8 +77,8 @@ Approx. size: ~200MB
 Usage: ./scripts/build.sh [OPTIONS]
 
 Options:
-  -u, --ubuntu VERSION       22.04 | 24.04                (default: 24.04)
-  -p, --python VERSION       3.12 | 3.13                  (default: 3.13)
+  -u, --ubuntu VERSION       22.04 | 24.04 | 26.04           (default: 26.04)
+  -p, --python VERSION       3.12 | 3.13 | 3.14              (default: 3.14)
   -c, --china                Enable Aliyun mirrors
   -t, --tag TAG              Custom image tag
       --push                 Push to registry
@@ -80,7 +90,7 @@ Options:
 
 GitHub Actions and Gitea Actions are included. Push to `main` to trigger automatic multi-arch builds.
 
-Matrix: 2 (Ubuntu) x 2 (Python) x 2 (mirror) = 8 images
+Matrix: 3 (Ubuntu) x 3 (Python) x 2 (mirror) = 18 images
 
 ### GitHub Actions
 

@@ -16,8 +16,8 @@ jobs:
   build:
     strategy:
       matrix:
-        ubuntu: ["22.04", "24.04"]
-        python: ["3.12", "3.13"]
+        ubuntu: ["22.04", "24.04", "26.04"]
+        python: ["3.12", "3.13", "3.14"]
         mirror: [false, true]
       fail-fast: false
     runs-on: ubuntu-latest
@@ -51,7 +51,7 @@ jobs:
 
       - name: Determine if latest
         id: latest
-        if: matrix.ubuntu == '24.04' && matrix.python == '3.13' && matrix.mirror == false
+        if: matrix.ubuntu == '26.04' && matrix.python == '3.14' && matrix.mirror == false
         run: echo "is_latest=true" >> "$GITHUB_OUTPUT"
 
       - name: Build & Push
