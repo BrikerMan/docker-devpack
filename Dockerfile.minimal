@@ -30,7 +30,6 @@ ARG UV_VERSION=latest
 ARG CHINA_MIRROR=false
 
 ENV DEBIAN_FRONTEND=noninteractive \
-    UV_TOOLCHAIN_DIR=/opt/uv \
     UV_COMPILE_BYTECODE=0 \
     UV_PYTHON_DOWNLOADS=never \
     UV_PYTHON=${PYTHON_VERSION} \
@@ -80,8 +79,9 @@ RUN set -eux; \
 # ── Non-root user ────────────────────────────────────────────────
 RUN groupadd -r app && \
     useradd -r -g app -d /home/app -s /bin/bash -m app && \
-    mkdir -p /code /opt/uv && \
-    chown -R app:app /code /opt/uv
+    mkdir -p /code /home/app/.local/share && \
+    cp -a /root/.local/share/uv /home/app/.local/share/uv && \
+    chown -R app:app /home/app/.local /code
 
 WORKDIR /code
 
