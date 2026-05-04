@@ -32,6 +32,8 @@ ARG CHINA_MIRROR=false
 ENV DEBIAN_FRONTEND=noninteractive \
     UV_TOOLCHAIN_DIR=/opt/uv \
     UV_COMPILE_BYTECODE=0 \
+    UV_PYTHON_DOWNLOADS=never \
+    UV_PYTHON=${PYTHON_VERSION} \
     PYTHONIOENCODING=utf-8 \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -73,7 +75,7 @@ RUN set -eux; \
       export UV_INDEX_URL="https://mirrors.aliyun.com/pypi/simple/" && \
       export UV_EXTRA_INDEX_URL="https://pypi.org/simple/"; \
     fi; \
-    uv python install ${PYTHON_VERSION}
+    UV_PYTHON_DOWNLOADS=auto uv python install ${PYTHON_VERSION}
 
 # ── Non-root user ────────────────────────────────────────────────
 RUN groupadd -r app && \
