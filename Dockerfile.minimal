@@ -31,8 +31,6 @@ ARG CHINA_MIRROR=false
 
 ENV DEBIAN_FRONTEND=noninteractive \
     UV_COMPILE_BYTECODE=0 \
-    UV_PYTHON_DOWNLOADS=never \
-    UV_PYTHON=${PYTHON_VERSION} \
     PYTHONIOENCODING=utf-8 \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -61,7 +59,13 @@ RUN set -eux; \
 # ── uv (copied from official image) ──────────────────────────────
 COPY --from=uv /uv /uvx /usr/local/bin/
 
-# ── PyPI / uv mirror (Aliyun) + Python install ───────────────────
+# ── Non-root user (create before Python install) ─────────────────
+RUN groupadd -r app && \
+    useradd -r -g app -d /home/app -s /bin/bash -m app && \
+    mkdir -p /code && \
+    chown app:app /code
+
+# ── PyPI mirror + Python install (as app user) ───────────────────
 RUN set -eux; \
     if [ "$CHINA_MIRROR" = "true" ]; then \
       mkdir -p /etc/profile.d && \
@@ -70,25 +74,21 @@ RUN set -eux; \
         echo 'UV_EXTRA_INDEX_URL="https://pypi.org/simple/"'; \
         echo 'PIP_INDEX_URL="https://mirrors.aliyun.com/pypi/simple/"'; \
         echo 'PIP_TRUSTED_HOST="mirrors.aliyun.com"'; \
-      } > /etc/profile.d/china-mirror.sh && \
-      export UV_INDEX_URL="https://mirrors.aliyun.com/pypi/simple/" && \
-      export UV_EXTRA_INDEX_URL="https://pypi.org/simple/"; \
-    fi; \
-    UV_PYTHON_DOWNLOADS=auto uv python install ${PYTHON_VERSION}
+      } > /etc/profile.d/china-mirror.sh; \
+    fi
 
-# ── Non-root user ────────────────────────────────────────────────
-RUN groupadd -r app && \
-    useradd -r -g app -d /home/app -s /bin/bash -m app && \
-    mkdir -p /code /home/app/.local/share && \
-    cp -a /root/.local/share/uv /home/app/.local/share/uv && \
-    chown -R app:app /home/app/.local /code
+USER app
+
+RUN set -eux; \
+    . /etc/profile.d/china-mirror.sh 2>/dev/null || true; \
+    uv python install ${PYTHON_VERSION}
 
 WORKDIR /code
 
 # ── Entrypoint (sources /etc/profile.d for runtime mirror env) ───
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+USER root
 RUN chmod +x /usr/local/bin/entrypoint.sh
-
 USER app
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
