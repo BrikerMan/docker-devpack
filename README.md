@@ -18,27 +18,23 @@ docker pull ghcr.io/brikerman/docker-devpack:latest
 
 ### All Tags
 
-| Tag | Ubuntu | Python | Mirror |
-|-----|--------|--------|--------|
-| `latest` | 26.04 | 3.14 | — |
-| `py3.14-ubuntu26.04` | 26.04 | 3.14 | — |
-| `py3.14-ubuntu24.04` | 24.04 | 3.14 | — |
-| `py3.14-ubuntu22.04` | 22.04 | 3.14 | — |
-| `py3.13-ubuntu26.04` | 26.04 | 3.13 | — |
-| `py3.13-ubuntu24.04` | 24.04 | 3.13 | — |
-| `py3.13-ubuntu22.04` | 22.04 | 3.13 | — |
-| `py3.12-ubuntu26.04` | 26.04 | 3.12 | — |
-| `py3.12-ubuntu24.04` | 24.04 | 3.12 | — |
-| `py3.12-ubuntu22.04` | 22.04 | 3.12 | — |
-| `py3.14-ubuntu26.04-china` | 26.04 | 3.14 | Aliyun |
-| `py3.14-ubuntu24.04-china` | 24.04 | 3.14 | Aliyun |
-| `py3.14-ubuntu22.04-china` | 22.04 | 3.14 | Aliyun |
-| `py3.13-ubuntu26.04-china` | 26.04 | 3.13 | Aliyun |
-| `py3.13-ubuntu24.04-china` | 24.04 | 3.13 | Aliyun |
-| `py3.13-ubuntu22.04-china` | 22.04 | 3.13 | Aliyun |
-| `py3.12-ubuntu26.04-china` | 26.04 | 3.12 | Aliyun |
-| `py3.12-ubuntu24.04-china` | 24.04 | 3.12 | Aliyun |
-| `py3.12-ubuntu22.04-china` | 22.04 | 3.12 | Aliyun |
+> `latest` → `py3.14-ubuntu26.04`
+
+**Standard**
+
+| Python \ Ubuntu | 26.04 | 24.04 | 22.04 |
+|-----------------|-------|-------|-------|
+| **3.14** | `py3.14-ubuntu26.04` | `py3.14-ubuntu24.04` | `py3.14-ubuntu22.04` |
+| **3.13** | `py3.13-ubuntu26.04` | `py3.13-ubuntu24.04` | `py3.13-ubuntu22.04` |
+| **3.12** | `py3.12-ubuntu26.04` | `py3.12-ubuntu24.04` | `py3.12-ubuntu22.04` |
+
+**China Mirror (Aliyun)**
+
+| Python \ Ubuntu | 26.04 | 24.04 | 22.04 |
+|-----------------|-------|-------|-------|
+| **3.14** | `py3.14-ubuntu26.04-china` | `py3.14-ubuntu24.04-china` | `py3.14-ubuntu22.04-china` |
+| **3.13** | `py3.13-ubuntu26.04-china` | `py3.13-ubuntu24.04-china` | `py3.13-ubuntu22.04-china` |
+| **3.12** | `py3.12-ubuntu26.04-china` | `py3.12-ubuntu24.04-china` | `py3.12-ubuntu22.04-china` |
 
 All images support `linux/amd64` and `linux/arm64`.
 
