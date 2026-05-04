@@ -163,6 +163,60 @@ CMD ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "800
 
 > **Tip**: Use `--no-install-project` during dependency installation, then copy source code and run `uv sync --frozen --no-dev` again to install the project itself. This maximizes Docker layer caching.
 
+### Matching Host UID (for Volume Mounts)
+
+When mounting host volumes, the container's `app` user (UID 999 by default) may differ from the host user's UID, causing permission issues. To align them:
+
+**Dockerfile** — accept `LOCAL_UID`/`LOCAL_GID` as build args:
+
+```dockerfile
+FROM ghcr.io/brikerman/docker-devpack:py3.13-ubuntu24.04-china
+
+ARG LOCAL_UID=1000
+ARG LOCAL_GID=1000
+
+USER root
+RUN groupmod -o -g $LOCAL_GID app 2>/dev/null || groupadd -o -g $LOCAL_GID app 2>/dev/null; \
+    usermod -o -u $LOCAL_UID -g $LOCAL_GID app 2>/dev/null || useradd -o -u $LOCAL_UID -g $LOCAL_GID -d /home/app -s /bin/bash app 2>/dev/null; \
+    apt-get update && apt-get install -y --no-install-recommends ffmpeg tzdata && \
+    mkdir -p /home/app && chown $LOCAL_UID:$LOCAL_GID /home/app && \
+    rm -rf /var/lib/apt/lists/*
+
+USER app
+WORKDIR /app
+
+COPY --chown=app:app pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev --no-install-project
+
+COPY --chown=app:app app ./app
+
+CMD ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+```
+
+**docker-compose.yml** — pass build args, remove `user:` directive:
+
+```yaml
+services:
+  api:
+    build:
+      context: .
+      args:
+        LOCAL_UID: ${LOCAL_UID:-1000}
+        LOCAL_GID: ${LOCAL_GID:-1000}
+    # No `user:` directive needed — Dockerfile already runs as the correct UID
+    environment:
+      HOME: /home/app
+```
+
+**Makefile** (unchanged):
+
+```makefile
+docker-dev-up:
+	LOCAL_UID=$$(id -u) LOCAL_GID=$$(id -g) docker compose up -d --build --wait
+```
+
+> **Why not `user:` in docker-compose?** Setting `user:` in docker-compose overrides the process UID at runtime, but `.venv` and cached files were created during build with a different UID, causing `Permission denied`. By aligning the UID at build time, the runtime user matches the file ownership.
+
 ### Why `UV_LINK_MODE=copy`?
 
 In Docker, uv's package cache and the target `.venv` are often on different filesystems or overlay layers. Hardlinking fails silently and falls back to copy with a warning. Setting `UV_LINK_MODE=copy` eliminates this warning and avoids potential issues.
