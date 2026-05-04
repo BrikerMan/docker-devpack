@@ -114,9 +114,9 @@ py<version>-ubuntu<version>[-china]
 
 Examples:
 ```
-py3.13-ubuntu24.04
-py3.12-ubuntu22.04-china
-py3.13              (short form, no ubuntu version)
+py3.14-ubuntu26.04
+py3.13-ubuntu22.04-china
+py3.14              (short form, no ubuntu version)
 ```
 
 ## Using in Your Project
