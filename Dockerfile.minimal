@@ -2,10 +2,10 @@
 # Ubuntu + Python (via uv) + uv package manager
 #
 # Build args:
-#   UBUNTU_VERSION  22.04 | 24.04      (default 24.04)
-#   PYTHON_VERSION  3.12  | 3.13       (default 3.13)
-#   UV_VERSION      any uv tag         (default latest)
-#   CHINA_MIRROR    true  | false      (default false)
+#   UBUNTU_VERSION  22.04 | 24.04 | 26.04   (default 26.04)
+#   PYTHON_VERSION  3.12  | 3.13  | 3.14    (default 3.14)
+#   UV_VERSION      any uv tag              (default latest)
+#   CHINA_MIRROR    true  | false           (default false)
 #
 # Usage:
 #   docker build --build-arg PYTHON_VERSION=3.12 -f Dockerfile.minimal -t devpack:minimal .
@@ -19,13 +19,13 @@
 # ─────────────────────────────────────────────────────────────────
 
 ARG UV_VERSION=latest
-ARG UBUNTU_VERSION=24.04
+ARG UBUNTU_VERSION=26.04
 FROM ghcr.io/astral-sh/uv:${UV_VERSION} AS uv
 
 FROM ubuntu:${UBUNTU_VERSION}
 
 ARG UBUNTU_VERSION
-ARG PYTHON_VERSION=3.13
+ARG PYTHON_VERSION=3.14
 ARG UV_VERSION=latest
 ARG CHINA_MIRROR=false
 

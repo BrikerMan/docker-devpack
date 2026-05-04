@@ -6,8 +6,8 @@ usage() {
 Usage: ./scripts/build.sh [OPTIONS]
 
 Options:
-  -u, --ubuntu VERSION       Ubuntu version: 22.04 | 24.04        (default: 24.04)
-  -p, --python VERSION       Python version: 3.12 | 3.13          (default: 3.13)
+  -u, --ubuntu VERSION       Ubuntu version: 22.04 | 24.04 | 26.04  (default: 26.04)
+  -p, --python VERSION       Python version: 3.12 | 3.13 | 3.14    (default: 3.14)
   -c, --china                Enable Aliyun mirrors (apt + PyPI + uv)
   -t, --tag TAG              Custom image tag
       --push                 Push to registry (requires --tag with registry prefix)
@@ -23,8 +23,8 @@ Examples:
 EOF
 }
 
-UBUNTU_VERSION="24.04"
-PYTHON_VERSION="3.13"
+UBUNTU_VERSION="26.04"
+PYTHON_VERSION="3.14"
 CHINA_MIRROR="false"
 TAG=""
 PUSH=false
