@@ -80,7 +80,7 @@ RUN set -eux; \
 USER app
 
 RUN set -eux; \
-    . /etc/profile.d/china-mirror.sh 2>/dev/null || true; \
+    [ -f /etc/profile.d/china-mirror.sh ] && . /etc/profile.d/china-mirror.sh; \
     uv python install ${PYTHON_VERSION}
 
 WORKDIR /code
