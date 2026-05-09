@@ -82,6 +82,20 @@ RUN set -eux; \
     [ -f /etc/profile.d/china-mirror.sh ] && . /etc/profile.d/china-mirror.sh; \
     uv python install ${PYTHON_VERSION}
 
+USER root
+RUN set -eux; \
+    PYBIN="$(su app -c 'uv python find' 2>/dev/null)"; \
+    if [ -n "$PYBIN" ] && [ -x "$PYBIN" ]; then \
+      ln -sf "$PYBIN" /usr/local/bin/python; \
+      ln -sf "$PYBIN" /usr/local/bin/python3; \
+      PYVER="$("$PYBIN" -c 'import sys;print(f"{sys.version_info.major}.{sys.version_info.minor}")')"; \
+      ln -sf "$PYBIN" "/usr/local/bin/python${PYVER}"; \
+      echo "Linked python -> $PYBIN"; \
+    else \
+      echo "WARNING: uv python not found, symlinks not created"; \
+    fi
+USER app
+
 WORKDIR /code
 
 # ── Entrypoint (sources /etc/profile.d for runtime mirror env) ───
