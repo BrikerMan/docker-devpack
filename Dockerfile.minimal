@@ -53,18 +53,22 @@ RUN set -eux; \
     ca-certificates \
     curl \
     build-essential \
+    git \
+    sudo \
     && rm -rf /var/lib/apt/lists/*
 
 # ── uv (copied from official image) ──────────────────────────────
 COPY --from=uv /uv /uvx /usr/local/bin/
 
-# ── Non-root user (create before Python install) ─────────────────
+# ── Non-root user + sudoers ──────────────────────────────────────
 RUN groupadd -r app && \
     useradd -r -g app -d /home/app -s /bin/bash -m app && \
     mkdir -p /code && \
     chown app:app /code
 
-# ── PyPI mirror + Python install (as app user) ───────────────────
+RUN echo "app ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers.d/app
+
+# ── PyPI mirror (as root, before Python install) ─────────────────
 RUN set -eux; \
     if [ "$CHINA_MIRROR" = "true" ]; then \
       mkdir -p /etc/profile.d && \
@@ -76,33 +80,31 @@ RUN set -eux; \
       } > /etc/profile.d/china-mirror.sh; \
     fi
 
-USER app
+# ── Entrypoint (as root, before switching to app) ────────────────
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
 
+# ── Switch to app user (single switch, stays app for remainder) ──
+USER app
+WORKDIR /code
+
+# ── Python install (as app user) ─────────────────────────────────
 RUN set -eux; \
     [ -f /etc/profile.d/china-mirror.sh ] && . /etc/profile.d/china-mirror.sh; \
     uv python install ${PYTHON_VERSION}
 
-USER root
+# ── Python symlinks (as app, using sudo for root-owned paths) ────
 RUN set -eux; \
-    PYBIN="$(su app -c 'uv python find' 2>/dev/null)"; \
+    PYBIN="$(uv python find 2>/dev/null)"; \
     if [ -n "$PYBIN" ] && [ -x "$PYBIN" ]; then \
-      ln -sf "$PYBIN" /usr/local/bin/python; \
-      ln -sf "$PYBIN" /usr/local/bin/python3; \
+      sudo ln -sf "$PYBIN" /usr/local/bin/python; \
+      sudo ln -sf "$PYBIN" /usr/local/bin/python3; \
       PYVER="$("$PYBIN" -c 'import sys;print(f"{sys.version_info.major}.{sys.version_info.minor}")')"; \
-      ln -sf "$PYBIN" "/usr/local/bin/python${PYVER}"; \
+      sudo ln -sf "$PYBIN" "/usr/local/bin/python${PYVER}"; \
       echo "Linked python -> $PYBIN"; \
     else \
       echo "WARNING: uv python not found, symlinks not created"; \
     fi
-USER app
-
-WORKDIR /code
-
-# ── Entrypoint (sources /etc/profile.d for runtime mirror env) ───
-COPY entrypoint.sh /usr/local/bin/entrypoint.sh
-USER root
-RUN chmod +x /usr/local/bin/entrypoint.sh
-USER app
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["/bin/bash"]

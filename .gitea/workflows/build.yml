@@ -11,6 +11,7 @@ on:
 env:
   REGISTRY: ${{ secrets.REGISTRY || "gitea.example.com" }}
   IMAGE_NAME: ${{ github.repository }}
+  IMAGE: ${{ github.repository }}
 
 jobs:
   build:
@@ -69,5 +70,5 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:py${{ matrix.python }}${{ steps.tag.outputs.suffix }}
             ${{ steps.latest.outputs.is_latest == 'true' && format('{0}/{1}:latest', env.REGISTRY, env.IMAGE_NAME) || '' }}
             ${{ steps.latest_china.outputs.is_latest_china == 'true' && format('{0}/{1}:latest-china', env.REGISTRY, env.IMAGE_NAME) || '' }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE }}:buildcache
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE }}:buildcache,mode=max
