@@ -68,6 +68,25 @@ jobs:
         if: matrix.ubuntu == '26.04' && matrix.python == '3.14' && matrix.mirror == true
         run: echo "is_latest_china=true" >> "$GITHUB_OUTPUT"
 
+      # Scheduled / no_cache runs must bypass the GHA layer cache entirely,
+      # otherwise every layer hits cache, the digest is unchanged and the
+      # "rebuild" is a silent no-op. Computed in a step because expression
+      # ternaries cannot render empty-string inputs reliably.
+      - name: Compute cache mode
+        id: mode
+        env:
+          NO_CACHE: ${{ github.event_name == 'schedule' || inputs.no_cache == true }}
+        run: |
+          if [ "$NO_CACHE" = "true" ]; then
+            echo "no_cache=true" >> "$GITHUB_OUTPUT"
+            echo "cache_from=" >> "$GITHUB_OUTPUT"
+            echo "cache_to=" >> "$GITHUB_OUTPUT"
+          else
+            echo "no_cache=false" >> "$GITHUB_OUTPUT"
+            echo "cache_from=type=gha" >> "$GITHUB_OUTPUT"
+            echo "cache_to=type=gha,mode=max" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Build & Push
         uses: docker/build-push-action@v6
         with:
@@ -84,12 +103,9 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:py${{ matrix.python }}${{ steps.tag.outputs.suffix }}
             ${{ steps.latest.outputs.is_latest == 'true' && format('{0}/{1}:latest', env.REGISTRY, env.IMAGE_NAME) || '' }}
             ${{ steps.latest_china.outputs.is_latest_china == 'true' && format('{0}/{1}:latest-china', env.REGISTRY, env.IMAGE_NAME) || '' }}
-          # Scheduled / no_cache runs must bypass the GHA layer cache entirely,
-          # otherwise every layer hits cache, the digest is unchanged and the
-          # "rebuild" is a silent no-op.
-          no-cache: ${{ github.event_name == 'schedule' || inputs.no_cache }}
-          cache-from: ${{ (github.event_name == 'schedule' || inputs.no_cache) && '' || 'type=gha' }}
-          cache-to: ${{ (github.event_name == 'schedule' || inputs.no_cache) && '' || 'type=gha,mode=max' }}
+          no-cache: ${{ steps.mode.outputs.no_cache }}
+          cache-from: ${{ steps.mode.outputs.cache_from }}
+          cache-to: ${{ steps.mode.outputs.cache_to }}
 
   report:
     # Version manifest + CVE delta report for scheduled / no-cache rebuilds.
