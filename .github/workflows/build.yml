@@ -146,7 +146,7 @@ jobs:
             v=$(dpkg-query -s "$p" 2>/dev/null | grep ^Version: | cut -d' ' -f2)
             echo "$p|${v:-not-installed}"
           done
-          echo "zipcrate|$(strings /usr/local/bin/uv 2>/dev/null | grep -oE 'zip-[0-9]+\.[0-9]+\.[0-9]+' | sort -u | tr '\n' ' ')"
+          echo "zipcrate|$(strings /usr/local/bin/uv 2>/dev/null | grep -oE '/zip-[0-9]+\.[0-9]+\.[0-9]+' | sed 's|^/||' | sort -u | tr '\n' ' ')"
           EOF
           for tag in $TAGS; do
             img="$IMAGE:$tag"
@@ -205,6 +205,10 @@ jobs:
             [ -f "$1" ] || { echo "-"; return; }
             jq -r --arg p "$2" '[.Results[]?.Vulnerabilities[]? | select(.PkgName==$p and .Severity=="CRITICAL")] | length' "$1" 2>/dev/null || echo "?"
           }
+          pkg_crit_fixable() { # $1=json $2=pkgname -> critical count that have a FixedVersion available
+            [ -f "$1" ] || { echo "-"; return; }
+            jq -r --arg p "$2" '[.Results[]?.Vulnerabilities[]? | select(.PkgName==$p and .Severity=="CRITICAL" and ((.FixedVersion // "") != ""))] | length' "$1" 2>/dev/null || echo "?"
+          }
           cve_keys() { [ -f "$1" ] || return 0; jq -r '[.Results[]?.Vulnerabilities[]? | .VulnerabilityID + " " + .PkgName] | unique | .[]' "$1" 2>/dev/null | sort; }
 
           # ---- explicit checks on the primary (production) tag ----
@@ -212,6 +216,13 @@ jobs:
           BASE_JSON="baseline/trivy-$PRIMARY.json"
           LLD_NEW=$(pkg_crit "$NEW_JSON" linux-libc-dev)
           LLD_BASE=$(pkg_crit "$BASE_JSON" linux-libc-dev)
+          LLD_NEW_FIXABLE=$(pkg_crit_fixable "$NEW_JSON" linux-libc-dev)
+          LLD_BASE_FIXABLE=$(pkg_crit_fixable "$BASE_JSON" linux-libc-dev)
+          LLD_NEW_NOFIX="?"
+          case "$LLD_NEW$LLD_NEW_FIXABLE" in
+            *[!0-9]*) ;; # missing/unknown json -> keep "?"
+            *) LLD_NEW_NOFIX=$((LLD_NEW - LLD_NEW_FIXABLE)) ;;
+          esac
           ZIP_NEW=$(get "$PRIMARY" zipcrate)
           ZIP_OK="yes"
           if [ -n "${ZIP_NEW// /}" ]; then
@@ -237,10 +248,11 @@ jobs:
             echo
             echo "| Check | Previous | Now | Status |"
             echo "|---|---|---|---|"
-            if [ "$LLD_NEW" = "0" ]; then
-              echo "| linux-libc-dev CRITICAL CVEs | $LLD_BASE | $LLD_NEW | ✅ cleared |"
+            if [ "$LLD_NEW_FIXABLE" = "0" ]; then
+              echo "| linux-libc-dev CRITICAL CVEs with a fix available | $LLD_BASE_FIXABLE | 0 | ✅ cleared (rebuilt to the newest version in the Ubuntu repo) |"
+              echo "| linux-libc-dev CRITICAL CVEs with no upstream fix | - | $LLD_NEW_NOFIX | ⚠️ not clearable by any rebuild (awaiting Ubuntu kernel patch) |"
             else
-              echo "| linux-libc-dev CRITICAL CVEs | $LLD_BASE | $LLD_NEW | ❌ still present |"
+              echo "| linux-libc-dev CRITICAL CVEs with a fix available | $LLD_BASE_FIXABLE | $LLD_NEW_FIXABLE | ❌ still present |"
             fi
             echo "| uv-embedded zip crate ≥ 9.0.5 (CVE-2026-115905) | ${ZIP_BASE_VER:-unknown}${ZIP_BASE_VER:+ (vuln reported)} | ${ZIP_NEW:-none found} | $([ "$ZIP_OK" != "no" ] && echo "✅" || echo "❌") $ZIP_OK |"
             echo
@@ -306,7 +318,7 @@ jobs:
           cat reports/report.md
           {
             echo "### Rebuild report"
-            echo "- linux-libc-dev CRITICAL ($PRIMARY): before=$LLD_BASE after=$LLD_NEW"
+            echo "- linux-libc-dev CRITICAL ($PRIMARY): before=$LLD_BASE after=$LLD_NEW (fixable=$LLD_NEW_FIXABLE, no-upstream-fix=$LLD_NEW_NOFIX)"
             echo "- zip crate: ${ZIP_NEW:-none} → check: $ZIP_OK"
           } >> "$GITHUB_STEP_SUMMARY"
 
