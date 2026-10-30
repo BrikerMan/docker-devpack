@@ -6,7 +6,16 @@ on:
     tags: ["v*"]
   pull_request:
     branches: [main]
+  schedule:
+    # Biweekly rebuild (1st & 15th, 18:00 UTC): refresh apt/uv/python patch
+    # layers so the base image does not accumulate CVEs between releases.
+    - cron: "0 18 1,15 * *"
   workflow_dispatch:
+    inputs:
+      no_cache:
+        description: "Rebuild with --no-cache and skip GHA layer cache (forces full apt/uv/python refresh)"
+        type: boolean
+        default: false
 
 env:
   REGISTRY: ghcr.io
@@ -75,5 +84,234 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:py${{ matrix.python }}${{ steps.tag.outputs.suffix }}
             ${{ steps.latest.outputs.is_latest == 'true' && format('{0}/{1}:latest', env.REGISTRY, env.IMAGE_NAME) || '' }}
             ${{ steps.latest_china.outputs.is_latest_china == 'true' && format('{0}/{1}:latest-china', env.REGISTRY, env.IMAGE_NAME) || '' }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # Scheduled / no_cache runs must bypass the GHA layer cache entirely,
+          # otherwise every layer hits cache, the digest is unchanged and the
+          # "rebuild" is a silent no-op.
+          no-cache: ${{ github.event_name == 'schedule' || inputs.no_cache }}
+          cache-from: ${{ (github.event_name == 'schedule' || inputs.no_cache) && '' || 'type=gha' }}
+          cache-to: ${{ (github.event_name == 'schedule' || inputs.no_cache) && '' || 'type=gha,mode=max' }}
+
+  report:
+    # Version manifest + CVE delta report for scheduled / no-cache rebuilds.
+    # Published as a GitHub Release (rebuild-YYYY.MM.DD) for downstream consumers.
+    needs: build
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.no_cache)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: read
+    env:
+      IMAGE: ghcr.io/brikerman/docker-devpack
+      # Tags synced to the private registry by docker-image-mover (config/target-images.txt)
+      TAGS: py3.13-ubuntu24.04-china py3.13-ubuntu24.04 latest
+      PRIMARY: py3.13-ubuntu24.04-china
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull images and collect version manifest
+        run: |
+          set -euo pipefail
+          mkdir -p reports
+          cat > probe.sh <<'EOF'
+          #!/bin/bash
+          . /etc/os-release 2>/dev/null || true
+          echo "os|${PRETTY_NAME:-unknown}"
+          echo "python|$(python3 -V 2>&1)"
+          echo "uv|$(uv --version 2>&1)"
+          for p in linux-libc-dev libc6-dev libssl3t64 libbrotli1; do
+            v=$(dpkg-query -s "$p" 2>/dev/null | grep ^Version: | cut -d' ' -f2)
+            echo "$p|${v:-not-installed}"
+          done
+          echo "zipcrate|$(strings /usr/local/bin/uv 2>/dev/null | grep -oE 'zip-[0-9]+\.[0-9]+\.[0-9]+' | sort -u | tr '\n' ' ')"
+          EOF
+          for tag in $TAGS; do
+            img="$IMAGE:$tag"
+            echo "::group::probe $tag"
+            docker pull --platform linux/amd64 --quiet "$img"
+            docker image inspect --format '{{index .RepoDigests 0}}' "$img" | sed 's/.*@/digest|/' > "reports/probe-$tag.txt"
+            docker run --rm --platform linux/amd64 \
+              -v "$PWD/probe.sh:/tmp/probe.sh:ro" \
+              "$img" bash /tmp/probe.sh >> "reports/probe-$tag.txt"
+            cat "reports/probe-$tag.txt"
+            echo "::endgroup::"
+          done
+
+      - name: Download previous release baseline
+        run: |
+          set -uo pipefail
+          mkdir -p baseline
+          prev=$(gh release list --limit 50 --json tagName --jq '[.[] | select(.tagName | startswith("rebuild-"))][0].tagName // empty')
+          if [ -n "$prev" ]; then
+            echo "PREV_RELEASE=$prev" >> "$GITHUB_ENV"
+            gh release download "$prev" --pattern 'trivy-*.json' --dir baseline/ || echo "no trivy assets on $prev"
+          else
+            echo "PREV_RELEASE=" >> "$GITHUB_ENV"
+          fi
+          ls -la baseline/ || true
+
+      - name: Trivy scan (CRITICAL,HIGH)
+        run: |
+          set -euo pipefail
+          docker volume create trivy-cache >/dev/null
+          for tag in $TAGS; do
+            echo "::group::trivy $tag"
+            docker run --rm \
+              -v /var/run/docker.sock:/var/run/docker.sock \
+              -v trivy-cache:/root/.cache/trivy \
+              -v "$PWD/reports:/reports" \
+              aquasec/trivy:latest image \
+              --format json --severity CRITICAL,HIGH --quiet \
+              --output "/reports/trivy-$tag.json" \
+              "$IMAGE:$tag"
+            echo "::endgroup::"
+          done
+
+      - name: Render report
+        run: |
+          set -uo pipefail
+          TODAY=$(date -u +%Y.%m.%d)
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+          get() { grep "^$2|" "reports/probe-$1.txt" 2>/dev/null | head -1 | cut -d'|' -f2- || echo "?"; }
+          cve_count() { # $1=json $2=severity
+            [ -f "$1" ] || { echo "-"; return; }
+            jq -r --arg sev "$2" '[.Results[]?.Vulnerabilities[]? | select(.Severity==$sev)] | length' "$1" 2>/dev/null || echo "?"
+          }
+          pkg_crit() { # $1=json $2=pkgname -> critical count for that package
+            [ -f "$1" ] || { echo "-"; return; }
+            jq -r --arg p "$2" '[.Results[]?.Vulnerabilities[]? | select(.PkgName==$p and .Severity=="CRITICAL")] | length' "$1" 2>/dev/null || echo "?"
+          }
+          cve_keys() { [ -f "$1" ] || return 0; jq -r '[.Results[]?.Vulnerabilities[]? | .VulnerabilityID + " " + .PkgName] | unique | .[]' "$1" 2>/dev/null | sort; }
+
+          # ---- explicit checks on the primary (production) tag ----
+          NEW_JSON="reports/trivy-$PRIMARY.json"
+          BASE_JSON="baseline/trivy-$PRIMARY.json"
+          LLD_NEW=$(pkg_crit "$NEW_JSON" linux-libc-dev)
+          LLD_BASE=$(pkg_crit "$BASE_JSON" linux-libc-dev)
+          ZIP_NEW=$(get "$PRIMARY" zipcrate)
+          ZIP_OK="yes"
+          if [ -n "${ZIP_NEW// /}" ]; then
+            for v in $ZIP_NEW; do
+              ver=${v#zip-}
+              if [ "$(printf '%s\n' "9.0.5" "$ver" | sort -V | head -1)" != "9.0.5" ]; then ZIP_OK="no"; fi
+            done
+          else
+            ZIP_OK="yes (no zip crate strings found)"
+          fi
+          ZIP_BASE_VER=$(jq -r '[.Results[]?.Vulnerabilities[]? | select(.PkgName=="zip")] | .[0].InstalledVersion // empty' "$BASE_JSON" 2>/dev/null || true)
+
+          {
+            echo "# docker-devpack rebuild report — $TODAY"
+            echo
+            echo "- Trigger: \`${{ github.event_name }}\`$( [ "${{ github.event_name }}" = "workflow_dispatch" ] && echo " (no_cache=${{ inputs.no_cache }})" )"
+            echo "- Workflow run: $RUN_URL"
+            echo "- Commit: \`${GITHUB_SHA::12}\`"
+            echo "- Build mode: **no-cache** (apt / uv / python fully re-resolved)"
+            echo "- Baseline: ${PREV_RELEASE:-none (first rebuild report)}"
+            echo
+            echo "## Explicit checks (primary tag: \`$PRIMARY\`, linux/amd64)"
+            echo
+            echo "| Check | Previous | Now | Status |"
+            echo "|---|---|---|---|"
+            if [ "$LLD_NEW" = "0" ]; then
+              echo "| linux-libc-dev CRITICAL CVEs | $LLD_BASE | $LLD_NEW | ✅ cleared |"
+            else
+              echo "| linux-libc-dev CRITICAL CVEs | $LLD_BASE | $LLD_NEW | ❌ still present |"
+            fi
+            echo "| uv-embedded zip crate ≥ 9.0.5 (CVE-2026-115905) | ${ZIP_BASE_VER:-unknown}${ZIP_BASE_VER:+ (vuln reported)} | ${ZIP_NEW:-none found} | $([ "$ZIP_OK" != "no" ] && echo "✅" || echo "❌") $ZIP_OK |"
+            echo
+            echo "## Version manifest"
+            echo
+            for tag in $TAGS; do
+              echo "### \`$IMAGE:$tag\` (linux/amd64)"
+              echo
+              echo "| Item | Value |"
+              echo "|---|---|"
+              echo "| digest | \`$(get "$tag" digest)\` |"
+              echo "| os | $(get "$tag" os) |"
+              echo "| python | $(get "$tag" python) |"
+              echo "| uv | $(get "$tag" uv) |"
+              echo "| linux-libc-dev | $(get "$tag" linux-libc-dev) |"
+              echo "| libc6-dev | $(get "$tag" libc6-dev) |"
+              echo "| libssl3t64 | $(get "$tag" libssl3t64) |"
+              echo "| libbrotli1 | $(get "$tag" libbrotli1) |"
+              echo
+            done
+            echo "## CVE summary (trivy, CRITICAL+HIGH)"
+            echo
+            echo "| Tag | CRITICAL prev → now | HIGH prev → now | Cleared | New | Remaining |"
+            echo "|---|---|---|---|---|---|"
+            for tag in $TAGS; do
+              NEW_J="reports/trivy-$tag.json"; BASE_J="baseline/trivy-$tag.json"
+              cn=$(cve_count "$NEW_J" CRITICAL); hn=$(cve_count "$NEW_J" HIGH)
+              cb=$(cve_count "$BASE_J" CRITICAL); hb=$(cve_count "$BASE_J" HIGH)
+              if [ -f "$BASE_J" ]; then
+                cleared=$(comm -23 <(cve_keys "$BASE_J") <(cve_keys "$NEW_J") | wc -l)
+                added=$(comm -13 <(cve_keys "$BASE_J") <(cve_keys "$NEW_J") | wc -l)
+                remaining=$(comm -12 <(cve_keys "$BASE_J") <(cve_keys "$NEW_J") | wc -l)
+              else
+                cleared="-"; added="-"; remaining="-"
+              fi
+              echo "| \`$tag\` | $cb → $cn | $hb → $hn | $cleared | $added | $remaining |"
+            done
+            echo
+            echo "### Remaining / new CRITICAL details"
+            for tag in $TAGS; do
+              NEW_J="reports/trivy-$tag.json"; BASE_J="baseline/trivy-$tag.json"
+              echo
+              echo "<details><summary>\`$tag\`</summary>"
+              echo
+              if [ -f "$BASE_J" ]; then
+                echo "New since baseline:"
+                echo '```'
+                comm -13 <(cve_keys "$BASE_J") <(cve_keys "$NEW_J") | while read -r id pkg; do
+                  jq -r --arg id "$id" --arg p "$pkg" '.Results[]?.Vulnerabilities[]? | select(.VulnerabilityID==$id and .PkgName==$p) | "\(.VulnerabilityID) \(.Severity) \(.PkgName) \(.InstalledVersion) → \(.FixedVersion // "no fix")"' "$NEW_J" | head -1
+                done
+                echo '```'
+              fi
+              echo "All CRITICAL in this rebuild:"
+              echo '```'
+              jq -r '[.Results[]?.Vulnerabilities[]? | select(.Severity=="CRITICAL") | "\(.VulnerabilityID) \(.PkgName) \(.InstalledVersion) → \(.FixedVersion // "no fix")"] | unique | .[]' "$NEW_J" 2>/dev/null | head -40
+              echo '```'
+              echo "</details>"
+            done
+            echo
+            echo "---"
+            echo "Propagation to \`git.bmio.net:19443/base/docker-devpack\`: docker-image-mover weekly sync-all picks these tags up automatically; for immediate propagation run \`sync-single-image\` for each tag above."
+          } > reports/report.md
+          cat reports/report.md
+          {
+            echo "### Rebuild report"
+            echo "- linux-libc-dev CRITICAL ($PRIMARY): before=$LLD_BASE after=$LLD_NEW"
+            echo "- zip crate: ${ZIP_NEW:-none} → check: $ZIP_OK"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload report artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: rebuild-report
+          path: |
+            reports/report.md
+            reports/trivy-*.json
+            reports/probe-*.txt
+          retention-days: 90
+
+      - name: Publish GitHub Release
+        run: |
+          set -euo pipefail
+          TODAY=$(date -u +%Y.%m.%d)
+          REL="rebuild-$TODAY"
+          if gh release view "$REL" >/dev/null 2>&1; then
+            REL="rebuild-$TODAY-$(date -u +%H%M%S)"
+          fi
+          gh release create "$REL" \
+            --title "Rebuild $TODAY" \
+            --notes-file reports/report.md \
+            reports/trivy-*.json
+          echo "Published release: $REL"
